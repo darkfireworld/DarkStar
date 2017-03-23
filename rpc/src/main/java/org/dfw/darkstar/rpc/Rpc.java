@@ -40,11 +40,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class Rpc {
     static Logger logger = LoggerFactory.getLogger(Rpc.class);
-    static ThreadLocal<FSTConfiguration> fstConf = new ThreadLocal() {
-        public FSTConfiguration initialValue() {
-            return FSTConfiguration.createDefaultConfiguration();
-        }
-    };
+    static FSTConfiguration fst = FSTConfiguration.createDefaultConfiguration();
 
     static public void export(final Class<?> cls, final Object inst, int port) throws Exception {
         if (!cls.isInterface()) {
@@ -67,9 +63,8 @@ public class Rpc {
                         ch.pipeline().addLast("FST_DECODE", new ByteToMessageDecoder() {
                             @Override
                             protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-                                FSTObjectInput is = new FSTObjectInput(new ByteBufInputStream(in), fstConf.get());
+                                FSTObjectInput is = fst.getObjectInput(new ByteBufInputStream(in));
                                 Object result = is.readObject();
-                                is.close();
                                 out.add(result);
                             }
                         });
@@ -77,10 +72,9 @@ public class Rpc {
                             @Override
                             protected void encode(ChannelHandlerContext ctx, Serializable msg, ByteBuf out) throws Exception {
                                 ByteBufOutputStream bout = new ByteBufOutputStream(out);
-                                FSTObjectOutput oout = new FSTObjectOutput(bout, fstConf.get());
+                                FSTObjectOutput oout = fst.getObjectOutput(bout);
                                 oout.writeObject(msg);
                                 oout.flush();
-                                oout.close();
                             }
                         });
                         ch.pipeline().addLast("TIMEOUT", new ChannelInboundHandlerAdapter() {
@@ -212,9 +206,8 @@ public class Rpc {
                         ch.pipeline().addLast("FST_DECODE", new ByteToMessageDecoder() {
                             @Override
                             protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-                                FSTObjectInput is = new FSTObjectInput(new ByteBufInputStream(in), fstConf.get());
+                                FSTObjectInput is = fst.getObjectInput(new ByteBufInputStream(in));
                                 Object result = is.readObject();
-                                is.close();
                                 out.add(result);
                             }
                         });
@@ -222,10 +215,9 @@ public class Rpc {
                             @Override
                             protected void encode(ChannelHandlerContext ctx, Serializable msg, ByteBuf out) throws Exception {
                                 ByteBufOutputStream bout = new ByteBufOutputStream(out);
-                                FSTObjectOutput oout = new FSTObjectOutput(bout, fstConf.get());
+                                FSTObjectOutput oout = fst.getObjectOutput(bout);
                                 oout.writeObject(msg);
                                 oout.flush();
-                                oout.close();
                             }
                         });
                         ch.pipeline().addLast("TIMEOUT", new ChannelInboundHandlerAdapter() {
