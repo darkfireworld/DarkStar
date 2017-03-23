@@ -10,6 +10,11 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolver;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -25,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * http://www.cnblogs.com/metoy/p/4321311.html?utm_source=tuicool&utm_medium=referral
  */
 public class Rpc {
+    static Logger logger = LoggerFactory.getLogger(Rpc.class);
 
     static public void export(final Class<?> cls, final Object inst, int port) throws Exception {
         if (!cls.isInterface()) {
@@ -41,13 +47,25 @@ public class Rpc {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
-//                        ch.pipeline().addLast("idle", new IdleStateHandler(0, 0, 16));
+                        ch.pipeline().addLast("idle", new IdleStateHandler(0, 0, 8));
                         ch.pipeline().addLast("decode", new ObjectDecoder(Integer.MAX_VALUE, new ClassResolver() {
                             public Class<?> resolve(String className) throws ClassNotFoundException {
                                 return Rpc.class.getClassLoader().loadClass(className);
                             }
                         }));
                         ch.pipeline().addLast("encode", new ObjectEncoder());
+                        ch.pipeline().addLast("timeout", new ChannelInboundHandlerAdapter() {
+                            @Override
+                            public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+                                if (evt instanceof IdleStateEvent) {
+                                    IdleStateEvent e = (IdleStateEvent) evt;
+                                    if (e.state() == IdleState.ALL_IDLE) {
+                                        logger.error("RPC CONNECT CLOSE，BECAUSE CONNECT IS IDLE TIMEOUT");
+                                        ctx.close();
+                                    }
+                                }
+                            }
+                        });
                         ch.pipeline().addLast("biz", new SimpleChannelInboundHandler<Object>() {
                             @Override
                             protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -55,29 +73,45 @@ public class Rpc {
                                     return;
                                 }
                                 RpcRequest rpcRequest = (RpcRequest) msg;
-                                Object ret = null;
-                                Throwable exp = null;
-                                try {
-                                    if (!rpcRequest.getCls().equals(cls.getName())) {
-                                        throw new RuntimeException("ERROR CLS NAME FIND CALL");
+                                RpcResponse rpcResponse = null;
+                                switch (rpcRequest.getType()) {
+                                    case RpcRequest.PING: {
+                                        logger.info("RPC PONG");
+                                        // ping
+                                        rpcResponse = new RpcResponse(rpcRequest.getRequestId(), RpcResponse.PONG, null, null);
                                     }
-                                    Class<?>[] parameterTypes = new Class[rpcRequest.getParam() != null ? rpcRequest.getParam().length : 0];
-                                    if (rpcRequest.getParam() != null) {
-                                        int i = -1;
-                                        for (Object param : rpcRequest.getParam()) {
-                                            i++;
-                                            parameterTypes[i] = param.getClass();
+                                    break;
+                                    case RpcRequest.RPC_REQUEST: {
+                                        // rpc
+                                        Object ret = null;
+                                        Throwable exp = null;
+                                        try {
+                                            if (!rpcRequest.getCls().equals(cls.getName())) {
+                                                throw new RuntimeException("ERROR CLS NAME FIND CALL");
+                                            }
+                                            Class<?>[] parameterTypes = new Class[rpcRequest.getParam() != null ? rpcRequest.getParam().length : 0];
+                                            if (rpcRequest.getParam() != null) {
+                                                int i = -1;
+                                                for (Object param : rpcRequest.getParam()) {
+                                                    i++;
+                                                    parameterTypes[i] = param.getClass();
+                                                }
+                                            }
+                                            Method method = cls.getMethod(rpcRequest.getMethod(), parameterTypes);
+                                            if (method == null) {
+                                                throw new RuntimeException("CANT FOUND METHOD");
+                                            }
+                                            ret = method.invoke(inst, rpcRequest.getParam() != null ? rpcRequest.getParam() : new Object[]{});
+                                        } catch (Throwable throwable) {
+                                            exp = throwable;
                                         }
+                                        rpcResponse = new RpcResponse(rpcRequest.getRequestId(), 2, ret, exp);
                                     }
-                                    Method method = cls.getMethod(rpcRequest.getMethod(), parameterTypes);
-                                    if (method == null) {
-                                        throw new RuntimeException("CANT FOUND METHOD");
+                                    break;
+                                    default: {
+                                        rpcResponse = new RpcResponse(rpcRequest.getRequestId(), RpcResponse.RPC_RESPONSE, null, null);
                                     }
-                                    ret = method.invoke(inst, rpcRequest.getParam() != null ? rpcRequest.getParam() : new Object[]{});
-                                } catch (Throwable throwable) {
-                                    exp = throwable;
                                 }
-                                RpcResponse rpcResponse = new RpcResponse(rpcRequest.getRequestId(), ret, exp);
                                 ctx.writeAndFlush(rpcResponse);
                             }
                         });
@@ -134,6 +168,7 @@ public class Rpc {
                 return ok;
             }
         }
+        final AtomicLong ids = new AtomicLong(1);
         final Map<Long, RpcResponseFuture> pendingMap = new ConcurrentHashMap<Long, RpcResponseFuture>(1024);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         Bootstrap bootstrap = new Bootstrap()
@@ -142,12 +177,28 @@ public class Rpc {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast("idle", new IdleStateHandler(8, 4, 0));
                         ch.pipeline().addLast("decode", new ObjectDecoder(Integer.MAX_VALUE, new ClassResolver() {
                             public Class<?> resolve(String className) throws ClassNotFoundException {
                                 return Rpc.class.getClassLoader().loadClass(className);
                             }
                         }));
                         ch.pipeline().addLast("encode", new ObjectEncoder());
+                        ch.pipeline().addLast("timeout", new ChannelInboundHandlerAdapter() {
+                            @Override
+                            public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+                                if (evt instanceof IdleStateEvent) {
+                                    IdleStateEvent e = (IdleStateEvent) evt;
+                                    if (e.state() == IdleState.READER_IDLE) {
+                                        logger.error("RPC CONNECT CLOSE，BECAUSE CONNECT IS READ TIMEOUT");
+                                        ctx.close();
+                                    } else if (e.state() == IdleState.WRITER_IDLE) {
+                                        logger.error("RPC PING");
+                                        ctx.writeAndFlush(new RpcRequest(ids.incrementAndGet(), RpcRequest.PING, null, null, null));
+                                    }
+                                }
+                            }
+                        });
                         ch.pipeline().addLast("biz", new SimpleChannelInboundHandler<Object>() {
                             @Override
                             protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -164,11 +215,11 @@ public class Rpc {
                     }
                 });
         final Channel channel = bootstrap.connect(host, port).sync().channel();
-        final AtomicLong ids = new AtomicLong(1);
+
         return Proxy.newProxyInstance(cls.getClassLoader(),
                 new Class[]{cls}, new InvocationHandler() {
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                        RpcRequest rpcRequest = new RpcRequest(ids.getAndIncrement(), cls.getName(), method.getName(), args);
+                        RpcRequest rpcRequest = new RpcRequest(ids.getAndIncrement(), RpcRequest.RPC_REQUEST, cls.getName(), method.getName(), args);
                         RpcResponseFuture rpcResponseFuture = new RpcResponseFuture();
                         // add to pending Map
                         pendingMap.put(rpcRequest.getRequestId(), rpcResponseFuture);
