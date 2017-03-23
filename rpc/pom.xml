@@ -57,5 +57,10 @@
             <artifactId>logback-access</artifactId>
         </dependency>
 
+        <!--fst-->
+        <dependency>
+            <groupId>de.ruedigermoeller</groupId>
+            <artifactId>fst</artifactId>
+        </dependency>
     </dependencies>
 </project>

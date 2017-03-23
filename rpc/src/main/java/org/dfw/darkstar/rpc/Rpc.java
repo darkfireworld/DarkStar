@@ -2,23 +2,32 @@ package org.dfw.darkstar.rpc;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.serialization.ClassResolver;
-import io.netty.handler.codec.serialization.ObjectDecoder;
-import io.netty.handler.codec.serialization.ObjectEncoder;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.MessageToByteEncoder;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
+import org.nustaq.serialization.FSTConfiguration;
+import org.nustaq.serialization.FSTObjectInput;
+import org.nustaq.serialization.FSTObjectOutput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,6 +40,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class Rpc {
     static Logger logger = LoggerFactory.getLogger(Rpc.class);
+    static ThreadLocal<FSTConfiguration> fstConf = new ThreadLocal() {
+        public FSTConfiguration initialValue() {
+            return FSTConfiguration.createDefaultConfiguration();
+        }
+    };
 
     static public void export(final Class<?> cls, final Object inst, int port) throws Exception {
         if (!cls.isInterface()) {
@@ -47,14 +61,29 @@ public class Rpc {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline().addLast("idle", new IdleStateHandler(0, 0, 8));
-                        ch.pipeline().addLast("decode", new ObjectDecoder(Integer.MAX_VALUE, new ClassResolver() {
-                            public Class<?> resolve(String className) throws ClassNotFoundException {
-                                return Rpc.class.getClassLoader().loadClass(className);
+                        ch.pipeline().addLast("IDLE", new IdleStateHandler(0, 0, 8));
+                        ch.pipeline().addLast("FRAME_DECODE", new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                        ch.pipeline().addLast("FRAME_ENCODE", new LengthFieldPrepender(4, 0));
+                        ch.pipeline().addLast("FST_DECODE", new ByteToMessageDecoder() {
+                            @Override
+                            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+                                FSTObjectInput is = new FSTObjectInput(new ByteBufInputStream(in), fstConf.get());
+                                Object result = is.readObject();
+                                is.close();
+                                out.add(result);
                             }
-                        }));
-                        ch.pipeline().addLast("encode", new ObjectEncoder());
-                        ch.pipeline().addLast("timeout", new ChannelInboundHandlerAdapter() {
+                        });
+                        ch.pipeline().addLast("FST_ENCODE", new MessageToByteEncoder<Serializable>() {
+                            @Override
+                            protected void encode(ChannelHandlerContext ctx, Serializable msg, ByteBuf out) throws Exception {
+                                ByteBufOutputStream bout = new ByteBufOutputStream(out);
+                                FSTObjectOutput oout = new FSTObjectOutput(bout, fstConf.get());
+                                oout.writeObject(msg);
+                                oout.flush();
+                                oout.close();
+                            }
+                        });
+                        ch.pipeline().addLast("TIMEOUT", new ChannelInboundHandlerAdapter() {
                             @Override
                             public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
                                 if (evt instanceof IdleStateEvent) {
@@ -66,14 +95,14 @@ public class Rpc {
                                 }
                             }
                         });
-                        ch.pipeline().addLast("biz", new SimpleChannelInboundHandler<Object>() {
+                        ch.pipeline().addLast("BIZ", new SimpleChannelInboundHandler<Object>() {
                             @Override
                             protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
                                 if (!(msg instanceof RpcRequest)) {
                                     return;
                                 }
                                 RpcRequest rpcRequest = (RpcRequest) msg;
-                                RpcResponse rpcResponse = null;
+                                RpcResponse rpcResponse;
                                 switch (rpcRequest.getType()) {
                                     case RpcRequest.PING: {
                                         logger.info("RPC PONG");
@@ -177,14 +206,29 @@ public class Rpc {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline().addLast("idle", new IdleStateHandler(8, 4, 0));
-                        ch.pipeline().addLast("decode", new ObjectDecoder(Integer.MAX_VALUE, new ClassResolver() {
-                            public Class<?> resolve(String className) throws ClassNotFoundException {
-                                return Rpc.class.getClassLoader().loadClass(className);
+                        ch.pipeline().addLast("IDLE", new IdleStateHandler(8, 4, 0));
+                        ch.pipeline().addLast("FRAME_DECODE", new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                        ch.pipeline().addLast("FRAME_ENCODE", new LengthFieldPrepender(4, 0));
+                        ch.pipeline().addLast("FST_DECODE", new ByteToMessageDecoder() {
+                            @Override
+                            protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+                                FSTObjectInput is = new FSTObjectInput(new ByteBufInputStream(in), fstConf.get());
+                                Object result = is.readObject();
+                                is.close();
+                                out.add(result);
                             }
-                        }));
-                        ch.pipeline().addLast("encode", new ObjectEncoder());
-                        ch.pipeline().addLast("timeout", new ChannelInboundHandlerAdapter() {
+                        });
+                        ch.pipeline().addLast("FST_ENCODE", new MessageToByteEncoder<Serializable>() {
+                            @Override
+                            protected void encode(ChannelHandlerContext ctx, Serializable msg, ByteBuf out) throws Exception {
+                                ByteBufOutputStream bout = new ByteBufOutputStream(out);
+                                FSTObjectOutput oout = new FSTObjectOutput(bout, fstConf.get());
+                                oout.writeObject(msg);
+                                oout.flush();
+                                oout.close();
+                            }
+                        });
+                        ch.pipeline().addLast("TIMEOUT", new ChannelInboundHandlerAdapter() {
                             @Override
                             public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
                                 if (evt instanceof IdleStateEvent) {
@@ -199,7 +243,7 @@ public class Rpc {
                                 }
                             }
                         });
-                        ch.pipeline().addLast("biz", new SimpleChannelInboundHandler<Object>() {
+                        ch.pipeline().addLast("BIZ", new SimpleChannelInboundHandler<Object>() {
                             @Override
                             protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
                                 if (!(msg instanceof RpcResponse)) {
