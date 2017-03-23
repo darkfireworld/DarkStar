@@ -15,8 +15,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -90,7 +90,51 @@ public class Rpc {
         if (!cls.isInterface()) {
             throw new RuntimeException("CLS NEED INSTANCE");
         }
-        final Map<Long, Tuple3<RpcRequest, RpcResponse, CountDownLatch>> pendMap = new ConcurrentHashMap<Long, Tuple3<RpcRequest, RpcResponse, CountDownLatch>>(1024);
+        // rpc response future
+        class RpcResponseFuture implements Future<RpcResponse> {
+            final static int TODO = 0;
+            final static int DONE = 1;
+            final static int CANCEL = 2;
+            CountDownLatch countDownLatch = new CountDownLatch(1);
+            volatile AtomicInteger state = new AtomicInteger(TODO);
+            volatile RpcResponse rpcResponse = null;
+
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                boolean ok = state.compareAndSet(TODO, CANCEL);
+                if (ok) {
+                    countDownLatch.countDown();
+                }
+                return ok;
+            }
+
+            public boolean isCancelled() {
+                return state.get() == CANCEL;
+            }
+
+            public boolean isDone() {
+                return state.get() == DONE;
+            }
+
+            public RpcResponse get() throws InterruptedException, ExecutionException {
+                countDownLatch.await();
+                return rpcResponse;
+            }
+
+            public RpcResponse get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+                countDownLatch.await(timeout, unit);
+                return rpcResponse;
+            }
+
+            public boolean done(RpcResponse rpcResponse) {
+                boolean ok = state.compareAndSet(TODO, DONE);
+                if (ok) {
+                    this.rpcResponse = rpcResponse;
+                    countDownLatch.countDown();
+                }
+                return ok;
+            }
+        }
+        final Map<Long, RpcResponseFuture> pendingMap = new ConcurrentHashMap<Long, RpcResponseFuture>(1024);
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         Bootstrap bootstrap = new Bootstrap()
                 .channel(NioSocketChannel.class)
@@ -111,10 +155,9 @@ public class Rpc {
                                     return;
                                 }
                                 RpcResponse rpcResponse = (RpcResponse) msg;
-                                Tuple3<RpcRequest, RpcResponse, CountDownLatch> pending = pendMap.get(rpcResponse.getRequestId());
-                                if (pending != null) {
-                                    pending._2 = rpcResponse;
-                                    pending._3.countDown();
+                                RpcResponseFuture rpcResponseFuture = pendingMap.get(rpcResponse.getRequestId());
+                                if (rpcResponseFuture != null) {
+                                    rpcResponseFuture.done(rpcResponse);
                                 }
                             }
                         });
@@ -126,16 +169,13 @@ public class Rpc {
                 new Class[]{cls}, new InvocationHandler() {
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                         RpcRequest rpcRequest = new RpcRequest(ids.getAndIncrement(), cls.getName(), method.getName(), args);
-                        CountDownLatch countDownLatch = new CountDownLatch(1);
-                        pendMap.put(rpcRequest.getRequestId(), new Tuple3<RpcRequest, RpcResponse, CountDownLatch>(rpcRequest, null, countDownLatch));
+                        RpcResponseFuture rpcResponseFuture = new RpcResponseFuture();
+                        // add to pending Map
+                        pendingMap.put(rpcRequest.getRequestId(), rpcResponseFuture);
                         channel.writeAndFlush(rpcRequest);
-                        countDownLatch.await();
-                        Tuple3<RpcRequest, RpcResponse, CountDownLatch> pending = pendMap.get(rpcRequest.getRequestId());
-                        pendMap.remove(rpcRequest.getRequestId());
-                        if (pending == null) {
-                            throw new RuntimeException("RpcResponse Is Null#1");
-                        }
-                        RpcResponse rpcResponse = pending._2;
+                        RpcResponse rpcResponse = rpcResponseFuture.get();
+                        // remove from pending Map
+                        pendingMap.remove(rpcRequest.getRequestId());
                         if (rpcResponse == null) {
                             throw new RuntimeException("RpcResponse Is Null#2");
                         }

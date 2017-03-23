@@ -9,7 +9,9 @@ public class Service {
     static public void main(String[] args) throws Exception {
         Rpc.export(HelloService.class, new HelloService() {
             public String say(String name) {
-                System.out.println("RECV：" + name);
+                if ("AA".equals(name)) {
+                    throw new RuntimeException("错误的名字");
+                }
                 return "HELLO " + name;
             }
         }, 8081);
