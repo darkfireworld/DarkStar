@@ -7,10 +7,10 @@ import org.dfw.darkstar.rpc.Rpc;
  */
 public class Client {
     static public void main(String[] args) throws Exception {
-        final HelloService helloService = (HelloService) Rpc.refer(HelloService.class, "127.0.0.1", 8081);
+        final MockService mockService = (MockService) Rpc.refer(MockService.class);
         long startTime = System.currentTimeMillis();
-        for (int i = 0; i < 1000; ++i) {
-            helloService.say("DARK_STAR");
+        for (int i = 0; i < 1000 * 10; ++i) {
+            mockService.say("DARK_STAR");
         }
         long endTime = System.currentTimeMillis();
         System.out.println(endTime - startTime);
