@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * https://github.com/changmingxie/tcc-transaction
  */
-public interface TccTx {
+public interface TccTransaction {
     /**
      * <pre>
      *     TRY:

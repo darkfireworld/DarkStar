@@ -13,6 +13,7 @@
         <module>tcc-api</module>
         <module>tcc-ts</module>
         <module>tcc-tc</module>
+        <module>service-tcc</module>
     </modules>
 
     <properties>
