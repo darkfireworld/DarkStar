@@ -2,14 +2,11 @@ package org.dfw.darkstar.service.bank01;
 
 import com.alibaba.fastjson.JSON;
 import org.dfw.darkstar.api.bank01.TccTransactionBank01;
-import org.dfw.darkstar.api.bank02.TccTransactionBank02;
 import org.dfw.darkstar.api.tcc.TccException;
 import org.dfw.darkstar.api.tcc.TccState;
 import org.dfw.darkstar.rpc.Rpc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Map;
 
 /**
  * TccTransactionBank01Service
@@ -21,8 +18,8 @@ public class TccTransactionBank01Service implements TccTransactionBank01 {
         Rpc.export(TccTransactionBank01.class, new TccTransactionBank01Service(), 2077);
     }
 
-    public String transaction(String tccId, String tccName, TccState tccState, String tccArg) throws TccException {
-        logger.info("{} - {} - {} - {}", tccId, tccName, tccState, JSON.toJSONString(tccArg));
+    public String transaction(String tccId, TccState tccState, String tccArg) throws TccException {
+        logger.info("{} - {} - {} - {}", tccId, tccState, JSON.toJSONString(tccArg));
         switch (tccState) {
             case TCC_TRY: {
 

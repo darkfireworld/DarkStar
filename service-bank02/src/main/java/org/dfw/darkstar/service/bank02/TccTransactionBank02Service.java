@@ -20,8 +20,8 @@ public class TccTransactionBank02Service implements TccTransactionBank02 {
         Rpc.export(TccTransactionBank02.class, new TccTransactionBank02Service(), 2229);
     }
 
-    public String transaction(String tccId, String tccName, TccState tccState, String tccArg) throws TccException {
-        logger.info("{} - {} - {} - {}", tccId, tccName, tccState, JSON.toJSONString(tccArg));
+    public String transaction(String tccId, TccState tccState, String tccArg) throws TccException {
+        logger.info("{} - {} - {} - {}", tccId, tccState, JSON.toJSONString(tccArg));
         switch (tccState) {
             case TCC_TRY: {
 

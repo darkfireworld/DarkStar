@@ -58,7 +58,7 @@ public class Rpc {
 
     // 启动curator
     static {
-        curator = CuratorFrameworkFactory.newClient("192.168.137.32:2181", 1000 * 16, 1000 * 32, new ExponentialBackoffRetry(4000, 1000));
+        curator = CuratorFrameworkFactory.newClient("192.168.137.32:2181", 1000 * 4, 1000 * 16, new ExponentialBackoffRetry(4000, 1000));
         curator.start();
         cluster = new Cluster(curator);
     }
@@ -147,6 +147,7 @@ public class Rpc {
                                             }
                                             ret = method.invoke(inst, rpcRequest.getParam() != null ? rpcRequest.getParam() : new Object[]{});
                                         } catch (Throwable throwable) {
+                                            logger.error(throwable.getMessage(), throwable);
                                             exp = throwable;
                                         }
                                         rpcResponse = new RpcResponse(rpcRequest.getRequestId(), 2, ret, exp);

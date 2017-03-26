@@ -23,7 +23,7 @@ public interface TccService {
      * @param tccArgs            调用参数
      * @return 返回参数
      */
-    Object exec(String tccId, String tccTransactionName, String tccArgs) throws TccException;
+    String exec(String tccId, String tccTransactionName, String tccArgs) throws TccException;
 
 
     /**
@@ -31,7 +31,7 @@ public interface TccService {
      *
      * @param tccId TCC_ID
      */
-    void commit(String tccId) throws TccException;
+    void confirm(String tccId) throws TccException;
 
     /**
      * 提交本次事务

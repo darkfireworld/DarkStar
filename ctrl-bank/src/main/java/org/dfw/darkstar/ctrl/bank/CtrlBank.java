@@ -20,8 +20,7 @@ public class CtrlBank {
             tccId = tccService.start("测试");
             tccService.exec(tccId, TccTransactionBank01.class.getName(), "BANK01");
             tccService.exec(tccId, TccTransactionBank02.class.getName(), "BANK02");
-            tccService.cancel(tccId);
-            tccService.commit(tccId);
+            tccService.confirm(tccId);
         } catch (Throwable e) {
             if (tccId != null) {
                 tccService.cancel(tccId);

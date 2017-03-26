@@ -25,6 +25,8 @@
         <fst.version>2.48</fst.version>
         <curator.version>2.9.1</curator.version>
         <guava.version>19.0</guava.version>
+        <druid.version>1.0.29</druid.version>
+        <mysql.version>5.1.39</mysql.version>
     </properties>
 
     <dependencyManagement>
@@ -102,6 +104,20 @@
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
                 <version>${guava.version}</version>
+            </dependency>
+
+            <!--druid-->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>druid</artifactId>
+                <version>${druid.version}</version>
+            </dependency>
+
+            <!--mysql-->
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${mysql.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
