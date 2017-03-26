@@ -1,6 +1,4 @@
-package org.dfw.darkstar.tcc.api;
-
-import java.util.Map;
+package org.dfw.darkstar.api.tcc;
 
 /**
  * https://github.com/changmingxie/tcc-transaction
@@ -25,8 +23,8 @@ public interface TccTransaction {
      * @param tccId    TCC_ID
      * @param tccName  TCC_NAME
      * @param tccState TCC_STATE
-     * @param tccArg   调用参数
+     * @param tccArgs  调用参数
      * @throws TccException Tcc异常
      */
-    String transaction(String tccId, String tccName, TccState tccState, Map<String, String> tccArg) throws TccException;
+    String transaction(String tccId, String tccName, TccState tccState, String tccArgs) throws TccException;
 }

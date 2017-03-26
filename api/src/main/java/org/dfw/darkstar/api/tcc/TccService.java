@@ -1,4 +1,4 @@
-package org.dfw.darkstar.tcc.api;
+package org.dfw.darkstar.api.tcc;
 
 /**
  * TccService
@@ -12,18 +12,18 @@ public interface TccService {
      * @return TCC_ID
      * @throws TccException Try阶段发生异常（可能已经提交成功）
      */
-    String begin(String tccName) throws TccException;
+    String start(String tccName) throws TccException;
 
 
     /**
      * 发起事务调用
      *
-     * @param tccId          事务ID
-     * @param tccTransaction 事务
-     * @param args           调用参数
+     * @param tccId              事务ID
+     * @param tccTransactionName 事务
+     * @param tccArgs            调用参数
      * @return 返回参数
      */
-    Object exec(String tccId, TccTransaction tccTransaction, Object args) throws TccException;
+    Object exec(String tccId, String tccTransactionName, String tccArgs) throws TccException;
 
 
     /**

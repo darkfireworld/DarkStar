@@ -10,10 +10,11 @@
     <version>1.0-SNAPSHOT</version>
     <modules>
         <module>rpc</module>
-        <module>tcc-api</module>
-        <module>tcc-ts</module>
-        <module>tcc-tc</module>
+        <module>api</module>
         <module>service-tcc</module>
+        <module>service-bank01</module>
+        <module>service-bank02</module>
+        <module>ctrl-bank</module>
     </modules>
 
     <properties>

@@ -9,19 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>service-tcc</artifactId>
+    <artifactId>api</artifactId>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.dfw.darkstar</groupId>
-            <artifactId>rpc</artifactId>
-            <version>${project.parent.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.dfw.darkstar</groupId>
-            <artifactId>api</artifactId>
-            <version>${project.parent.version}</version>
-        </dependency>
-    </dependencies>
 
 </project>
